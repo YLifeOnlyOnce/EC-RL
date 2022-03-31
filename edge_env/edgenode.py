@@ -6,7 +6,7 @@ Desc: edge computing node
 
 
 class EdgeNode:
-    def __init__(self, computing_resource, location_x, location_y, access_range, bandwidth, energy_factor) -> None:
+    def __init__(self, computing_resource, location_x, location_y, access_range, bandwidth, energy_factor,power_max) -> None:
         self.computing_resource = computing_resource                    # 计算资源总量
         self.available_computing_resource = computing_resource          # 可用计算资源
         self.location_x = location_x                                    # 坐标 x
@@ -15,3 +15,4 @@ class EdgeNode:
         self.access_range = access_range                                # 通信范围
         self.computing_task = []                                        # 所有的计算任务
         self.energy_factor = energy_factor                              # 能耗因子
+        self.power_max = power_max                                      # 最高功耗
