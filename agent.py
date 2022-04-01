@@ -32,7 +32,7 @@ users = []
 tasks = []
 edgeNodes = []
 
-USER_NUM = 2
+USER_NUM = 1
 TASKS_NUM = 1
 EDGENODE_NUM = 5
 
@@ -157,12 +157,12 @@ class ReplayMemory(object):
 
 
 # 设置memory
-memory = ReplayMemory(20000)
+memory = ReplayMemory(8000)
 
 # 训练轮次
-num_episodes = 50
+num_episodes = 100
 # 每一轮多少步
-count = 2000
+count = 600
 # 训练
 for i_epospde in range(num_episodes):
     # 初始化环境
@@ -190,7 +190,7 @@ for i_epospde in range(num_episodes):
     energy = env.energy_computing_total()
     print("state", state)
     print("f_reward:", f_reword)
-    writer.add_scalar("train_reward_one2five_time", f_reword, i_epospde+1)
+    writer.add_scalar("train_reward", f_reword, i_epospde+1)
     writer.add_scalar("train_reward_energy", energy, i_epospde+1)
 
 writer.close()
