@@ -32,7 +32,7 @@ users = []
 tasks = []
 edgeNodes = []
 
-USER_NUM = 1
+USER_NUM = 3
 TASKS_NUM = 1
 EDGENODE_NUM = 5
 
@@ -157,12 +157,12 @@ class ReplayMemory(object):
 
 
 # 设置memory
-memory = ReplayMemory(8000)
+memory = ReplayMemory(14000)
 
 # 训练轮次
 num_episodes = 100
 # 每一轮多少步
-count = 600
+count = 1400
 # 训练
 for i_epospde in range(num_episodes):
     # 初始化环境
