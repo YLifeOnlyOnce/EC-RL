@@ -50,41 +50,53 @@ class EdgeEnv:
         offload_matrix = self.offload_percent_matrix[:, 1:]
         isOffload_matrix = F.relu(offload_matrix)
         # 计算资源为一个确定的值，先不去分配, 随机一个范围，然后均分
-        self.edgeComputingAllocation_matrix = self.edgeComputingAllocation_matrix + torch.randint(18, 24, (
+        self.edgeComputingAllocation_matrix = self.edgeComputingAllocation_matrix + torch.randint(22, 24, (
             1, self.edgeNum))
         self.init_edgeComputingAllocation_matrix = self.edgeComputingAllocation_matrix
-        r = self.reward()
+
+        r = 0
         self.state = torch.cat([self.offload_percent_matrix.flatten(), self.edgeComputingAllocation_matrix.flatten()])
         return r, self.state, False
 
     def step(self, action):
+
+        # 计算原有能耗
+        e = self.energy_computing_total()
         # 修改卸载资源百分比
         self.changeOffloadPercent(action)
         # 修载卸载到边缘的计算资源的量
         self.changeOffloadComputingResource()
         # 修改边缘节点对任务的计算资源分配
         self.changeEdgeComputingAllocation()
-        r = self.reward()
+        # 计算现有能耗
+        e_next = self.energy_computing_total()
+        r = self.reward(e, e_next)
         self.state = torch.cat([self.offload_percent_matrix.flatten(), self.edgeComputingAllocation_matrix.flatten()])
         is_done = False
         return r, self.state, is_done
 
     # 计算任务所需能耗
     def energy_computing_total(self):
-        lamda = 0.12    # 能耗因子
-        p_idle = 0.65   # 空闲时 功耗占比
-        p_sleep = 0.3   # 休眠时 功耗占比
-        E = 0           # 总能耗
+        lamda = 0.12  # 能耗因子
+        p_idle = 0.65  # 空闲时 功耗占比
+        p_sleep = 0.3  # 休眠时 功耗占比
+        E = 0  # 总能耗
 
         # 用户任务本地执行时间
         E_user = 0
+        Sys_time_total = 0
         for u_i in range(self.userNum):
-            time_user_comuting = (self.offload_percent_matrix[u_i, 0]* self.users[u_i].task.required_computing_resource) / self.users[u_i].computing_resource
+            time_user_comuting = (self.offload_percent_matrix[u_i, 0] * self.users[
+                u_i].task.required_computing_resource) / self.users[u_i].computing_resource
+            Sys_time_total = max(Sys_time_total, time_user_comuting)
             E_user = E_user + time_user_comuting * 80
         # 总体执行时间 - 两个矩阵做除法 矩阵求最大
         offload_computing_time_matrix = self.offload_computing_resource / self.edgeComputingAllocation_matrix
-        offload_computing_time_matrix = torch.where(torch.isnan(offload_computing_time_matrix), torch.full_like(offload_computing_time_matrix, 0), offload_computing_time_matrix)
+        offload_computing_time_matrix = torch.where(torch.isnan(offload_computing_time_matrix),
+                                                    torch.full_like(offload_computing_time_matrix, 0),
+                                                    offload_computing_time_matrix)
         edge_computing_time_total = torch.max(offload_computing_time_matrix)
+        Sys_time_total = max(Sys_time_total, edge_computing_time_total)
         # print("total",edge_computing_time_total)
         # 每个边缘节点的执行时间 - 每个任务，也就是每一行 row 求最大
         edge_computing_time_task = torch.amax(offload_computing_time_matrix, 0)
@@ -97,7 +109,7 @@ class EdgeEnv:
             # 执行时间
             time_running = edge_computing_time_task[i]
             # 休息时间
-            time_idle = edge_computing_time_total - time_running
+            time_idle = Sys_time_total - time_running
             # CPU 利用率 = 当前分配出去的计算资源 / 边缘服务器的总计算资源
             resource_now = torch.sum(self.edgeComputingAllocation_matrix[:, i])
             # print("resource_nonw",resource_now)
@@ -109,7 +121,7 @@ class EdgeEnv:
                 edge_i_energy = edge_i_energy + time_idle * (p_idle * self.edgeNodes[i].power_max)
             else:
                 # 没有任务卸载到该服务器，则用总时间✖️待机功耗
-                edge_i_energy = edge_computing_time_total * (p_idle * self.edgeNodes[i].power_max)
+                edge_i_energy = Sys_time_total * (p_idle * self.edgeNodes[i].power_max)
             E = E + edge_i_energy
 
         return E + E_user
@@ -117,38 +129,42 @@ class EdgeEnv:
     '''
     Reward function：奖励函数
     '''
-    def reward(self):
-        r = 200000 / self.energy_computing_total()
+
+    def reward(self, e, e_next):
+        r = 0
+        if e > e_next:
+            r = 1
+        elif e < e_next:
+            r = -1
+        elif e == e_next:
+            r = -0.1
         return r
 
     # 执行 action 修改卸载百分比
     def changeOffloadPercent(self, action):
-        userpart = int(action / (3 * (self.edgeNum + 1)))
+        act_range = 0.01
+        userpart = int(action / (2 * self.edgeNum + 1))
         # print("第{}个任务".format(userpart))
-        # 第几个任务的第几个动作，3*6 = 18
-        act_index = action % (3 * (self.edgeNum + 1))
+        # 第几个任务的第几个动作，2*(5+1) = 18
+        act_index = int(action % (2 * self.edgeNum + 1))
         # print("第个任务的{}个动作".format(act_index))
-        # 第几个边缘节点
-        edgeindex = act_index % (self.edgeNum + 1)
-        # print('第{}个卸载位置'.format(edgeindex))
-        # 哪一种动作
-        act = int(act_index / (self.edgeNum + 1))
-        # self.offload_percent_matrix[]
-        # print(act)
-
-        if edgeindex != 0:
-            # 执行动作。P[userpart][edgeindex] act + -
-            if act == 0:
-                pass
-            elif act == 1:
-                self.offload_percent_matrix[userpart, edgeindex] = min(
-                    self.offload_percent_matrix[userpart, edgeindex] + 0.01, 1.00)
-                self.offload_percent_matrix[userpart, 0] = max(self.offload_percent_matrix[userpart, 0] - 0.01, 0.00)
-            elif act == 2:
-                self.offload_percent_matrix[userpart, edgeindex] = max(
-                    self.offload_percent_matrix[userpart, edgeindex] - 0.01, 0.00)
-                self.offload_percent_matrix[userpart, 0] = min(self.offload_percent_matrix[userpart, 0] + 0.01, 1.00)
-        # print(self.offload_percent_matrix)
+        if act_index == 0:
+            # 选择了任务 userpart的本地 则PASS
+            pass
+        elif 0 < act_index <= self.edgeNum:
+            # 加法 - 边缘节点加， 用户本地减
+            edge_index = act_index  # 第4个的话， 索引是 4-1
+            if self.offload_percent_matrix[userpart, edge_index] != 1 and self.offload_percent_matrix[userpart, 0] >= act_range:
+                self.offload_percent_matrix[userpart, 0] = self.offload_percent_matrix[userpart, 0] - act_range
+                self.offload_percent_matrix[userpart, edge_index] = self.offload_percent_matrix[
+                                                                        userpart, edge_index] + act_range
+        elif self.edgeNum < act_index <= 2 * self.edgeNum:
+            # 减法 - 边缘节点减， 用户本地加
+            edge_index = act_index - self.edgeNum
+            if self.offload_percent_matrix[userpart, edge_index] >= act_range and self.offload_percent_matrix[userpart, 0] <= 1-act_range:
+                self.offload_percent_matrix[userpart, 0] = self.offload_percent_matrix[userpart, 0] + act_range
+                self.offload_percent_matrix[userpart, edge_index] = self.offload_percent_matrix[
+                                                                        userpart, edge_index] - act_range
 
     # 任务卸载到边缘节点的【计算资源】的矩阵
     def changeOffloadComputingResource(self):
@@ -165,9 +181,12 @@ class EdgeEnv:
         # 是否有卸载 生成0-1矩阵
         isOffload_matrix = (offload_matrix != 0).type(torch.float)
         # 计算资源为一个确定的值，先不去分配, 随机一个范围，然后均分
-        self.edgeComputingAllocation_matrix = torch.div(self.init_edgeComputingAllocation_matrix, torch.sum(isOffload_matrix, dim=0)) * isOffload_matrix
+        self.edgeComputingAllocation_matrix = torch.div(self.init_edgeComputingAllocation_matrix,
+                                                        torch.sum(isOffload_matrix, dim=0)) * isOffload_matrix
         # 去除 inf 的无穷值
-        self.edgeComputingAllocation_matrix = torch.where(torch.isnan(self.edgeComputingAllocation_matrix), torch.full_like(self.edgeComputingAllocation_matrix, 0), self.edgeComputingAllocation_matrix)
+        self.edgeComputingAllocation_matrix = torch.where(torch.isnan(self.edgeComputingAllocation_matrix),
+                                                          torch.full_like(self.edgeComputingAllocation_matrix, 0),
+                                                          self.edgeComputingAllocation_matrix)
         # print(self.edgeComputingAllocation_matrix)
 
     @classmethod

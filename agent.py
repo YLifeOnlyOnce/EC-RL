@@ -32,7 +32,7 @@ users = []
 tasks = []
 edgeNodes = []
 
-USER_NUM = 3
+USER_NUM = 1
 TASKS_NUM = 1
 EDGENODE_NUM = 5
 
@@ -41,7 +41,7 @@ for index in range(USER_NUM):
     users.append(User('user' + str(index), 5, 45, 45, task))
 
 for index in range(EDGENODE_NUM):
-    edgenode = EdgeNode(24, 45, 45, 300, 2000, energy_factor=0.2, power_max=(100 + int(index)*10) )
+    edgenode = EdgeNode(32, 45, 45, 300, 2000, energy_factor=0.2, power_max=(80 + int(index)*10) )
     edgeNodes.append(edgenode)
 # ---------- 初始化用户和节点 end -----------
 
@@ -50,11 +50,11 @@ for index in range(EDGENODE_NUM):
 EPS_START = 0.9
 EPS_END = 0.05
 EPS_DECAY = 150000
-BATCH_SIZE = 400
+BATCH_SIZE = 1000
 GAMMA = 0.999
 
 state_space = USER_NUM * (EDGENODE_NUM + 1) + EDGENODE_NUM * USER_NUM
-action_space = (USER_NUM * (EDGENODE_NUM + 1) * 3)
+action_space = USER_NUM * (1 + 2*EDGENODE_NUM)
 policy_net = DQN(state_space, action_space).to(device)
 target_net = DQN(state_space, action_space).to(device)
 # 预训练权重加载
@@ -126,7 +126,7 @@ def optimize_model():
     # Compute the expected Q values
     expected_state_action_values = (next_state_values * GAMMA) + reward_batch
     if steps_done % 10000 == 0:
-        print('state_action_values', state_action_values)
+        print('state_action_values', state_action_values[:100,0])
     # Compute Huber loss
     criterion = nn.SmoothL1Loss()
     loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
@@ -157,38 +157,41 @@ class ReplayMemory(object):
 
 
 # 设置memory
-memory = ReplayMemory(50000)
+memory = ReplayMemory(20000)
 
 # 训练轮次
-num_episodes = 60
+num_episodes = 50
 # 每一轮多少步
-count = 6000
+count = 2000
 # 训练
 for i_epospde in range(num_episodes):
     # 初始化环境
     env = EdgeEnv(edgeNodes, users, edgeNum=EDGENODE_NUM, userNum=USER_NUM)
     print('-------------- 回合 {} 开始------------------'.format(i_epospde))
     state = env.initState()
+    init_energy = env.energy_computing_total()
     if i_epospde == 0:
         reward, next_state, done = env.step(0)
         writer.add_scalar("train_reward_one2five_time", reward, i_epospde)
+        writer.add_scalar("train_reward_energy", init_energy, i_epospde)
     f_reword = 0
     for step in range(count):
         # policy network
         action = select_action(state)
         # action = np.random.randint(0, 18)
         reward, next_state, done = env.step(action=action)
-        if step % 3999 == 0:
-            print("state", state)
-            f_reword = reward
+        f_reword = f_reword + reward
         # Store the transition in memory
-        memory.push(state, action, next_state, torch.tensor([reward]))
+        memory.push(state, action, next_state, torch.tensor([f_reword]))
         # Move to the next state
         state = next_state
         # 优化器 优化模型参数
         optimize_model()
+    energy = env.energy_computing_total()
+    print("state", state)
     print("f_reward:", f_reword)
-    writer.add_scalar("train_reward", f_reword, i_epospde+1)
+    writer.add_scalar("train_reward_one2five_time", f_reword, i_epospde+1)
+    writer.add_scalar("train_reward_energy", energy, i_epospde+1)
 
 writer.close()
 print("done ")
