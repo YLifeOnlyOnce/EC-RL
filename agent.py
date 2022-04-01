@@ -32,7 +32,7 @@ users = []
 tasks = []
 edgeNodes = []
 
-USER_NUM = 1
+USER_NUM = 2
 TASKS_NUM = 1
 EDGENODE_NUM = 5
 
