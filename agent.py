@@ -32,12 +32,12 @@ users = []
 tasks = []
 edgeNodes = []
 
-USER_NUM = 3
+USER_NUM = 1
 TASKS_NUM = 1
 EDGENODE_NUM = 5
 
 for index in range(USER_NUM):
-    task = Task('task' + str(index), 100 + int(index), 1000, 5000)
+    task = Task('task' + str(index), 500 + int(index), 1000, 5000)
     users.append(User('user' + str(index), 5, 45, 45, task))
 
 for index in range(EDGENODE_NUM):
@@ -49,9 +49,10 @@ for index in range(EDGENODE_NUM):
 # - -- - -- - - - - - -- DQN ---- - - - - - - - - - - -
 EPS_START = 0.9
 EPS_END = 0.05
-EPS_DECAY = 150000
-BATCH_SIZE = 1000
+EPS_DECAY = 15000  # 400-10000-8000   #600- 10000 - 8000  # 800--60000-20000不够
+BATCH_SIZE = 600
 GAMMA = 0.999
+TARGET_UPDATE = 10
 
 state_space = USER_NUM * (EDGENODE_NUM + 1) + EDGENODE_NUM * USER_NUM
 action_space = USER_NUM * (1 + 2*EDGENODE_NUM)
@@ -157,23 +158,25 @@ class ReplayMemory(object):
 
 
 # 设置memory
-memory = ReplayMemory(14000)
+memory = ReplayMemory(80000)
 
 # 训练轮次
 num_episodes = 100
 # 每一轮多少步
-count = 1400
+count = 400
 # 训练
-for i_epospde in range(num_episodes):
+for i_episode in range(num_episodes):
     # 初始化环境
     env = EdgeEnv(edgeNodes, users, edgeNum=EDGENODE_NUM, userNum=USER_NUM)
-    print('-------------- 回合 {} 开始------------------'.format(i_epospde))
+    print('-------------- 回合 {} 开始------------------'.format(i_episode))
     state = env.initState()
     init_energy = env.energy_computing_total()
-    if i_epospde == 0:
+    init_time = env.time_computing_total()
+    if i_episode == 0:
         reward, next_state, done = env.step(0)
-        writer.add_scalar("train_reward_one2five_time", reward, i_epospde)
-        writer.add_scalar("train_reward_energy", init_energy, i_epospde)
+        writer.add_scalar("train_reward", reward, i_episode)
+        writer.add_scalar("train_reward_time",init_time, i_episode)
+        writer.add_scalar("train_reward_energy", init_energy, i_episode)
     f_reword = 0
     for step in range(count):
         # policy network
@@ -187,11 +190,15 @@ for i_epospde in range(num_episodes):
         state = next_state
         # 优化器 优化模型参数
         optimize_model()
+    if i_episode % TARGET_UPDATE == 0:
+        target_net.load_state_dict(policy_net.state_dict())
     energy = env.energy_computing_total()
+    time = env.time_computing_total()
     print("state", state)
     print("f_reward:", f_reword)
-    writer.add_scalar("train_reward", f_reword, i_epospde+1)
-    writer.add_scalar("train_reward_energy", energy, i_epospde+1)
+    writer.add_scalar("train_reward", f_reword, i_episode+1)
+    writer.add_scalar("train_reward_time", time, i_episode+1)
+    writer.add_scalar("train_reward_energy", energy, i_episode+1)
 
 writer.close()
 print("done ")

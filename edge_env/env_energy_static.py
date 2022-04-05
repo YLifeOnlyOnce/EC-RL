@@ -50,7 +50,7 @@ class EdgeEnv:
         offload_matrix = self.offload_percent_matrix[:, 1:]
         isOffload_matrix = F.relu(offload_matrix)
         # 计算资源为一个确定的值，先不去分配, 随机一个范围，然后均分
-        self.edgeComputingAllocation_matrix = self.edgeComputingAllocation_matrix + torch.randint(22, 24, (
+        self.edgeComputingAllocation_matrix = self.edgeComputingAllocation_matrix + torch.randint(17, 24, (
             1, self.edgeNum))
         self.init_edgeComputingAllocation_matrix = self.edgeComputingAllocation_matrix
 
@@ -126,6 +126,20 @@ class EdgeEnv:
 
         return E + E_user
 
+    def time_computing_total(self):
+        Sys_time_total = 0
+        for u_i in range(self.userNum):
+            time_user_comuting = (self.offload_percent_matrix[u_i, 0] * self.users[
+                u_i].task.required_computing_resource) / self.users[u_i].computing_resource
+            Sys_time_total = max(Sys_time_total, time_user_comuting)
+        # 总体执行时间 - 两个矩阵做除法 矩阵求最大
+        offload_computing_time_matrix = self.offload_computing_resource / self.edgeComputingAllocation_matrix
+        offload_computing_time_matrix = torch.where(torch.isnan(offload_computing_time_matrix),
+                                                    torch.full_like(offload_computing_time_matrix, 0),
+                                                    offload_computing_time_matrix)
+        edge_computing_time_total = torch.max(offload_computing_time_matrix)
+        Sys_time_total = max(Sys_time_total, edge_computing_time_total)
+        return Sys_time_total
     '''
     Reward function：奖励函数
     '''
