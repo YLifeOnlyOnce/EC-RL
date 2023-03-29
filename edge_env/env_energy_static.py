@@ -89,7 +89,8 @@ class EdgeEnv:
             time_user_comuting = (self.offload_percent_matrix[u_i, 0] * self.users[
                 u_i].task.required_computing_resource) / self.users[u_i].computing_resource
             Sys_time_total = max(Sys_time_total, time_user_comuting)
-            E_user = E_user + time_user_comuting * 80
+            # 80 - 50
+            E_user = E_user + time_user_comuting * 70
         # 总体执行时间 - 两个矩阵做除法 矩阵求最大
         offload_computing_time_matrix = self.offload_computing_resource / self.edgeComputingAllocation_matrix
         offload_computing_time_matrix = torch.where(torch.isnan(offload_computing_time_matrix),
